@@ -70,6 +70,11 @@ export default function LoginPage() {
             <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
             Remember me
           </label>
+          <div className="text-right text-sm">
+            <Link href="/forgot-password" className="font-medium text-indigo-600 hover:text-indigo-700">
+              Forgot password?
+            </Link>
+          </div>
           {errors.general && <p className="text-sm text-red-600">{errors.general}</p>}
           <Button type="submit" fullWidth disabled={loading}>
             {loading ? 'Signing in...' : 'Log In'}

@@ -1,6 +1,21 @@
+"use client";
+
 import AdminSidebar from "@/components/admin/AdminSidebar";
+import { useAuthGuard } from "@/lib/auth";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  const { ready } = useAuthGuard({ requireAdmin: true });
+
+  if (!ready) {
+    return (
+      <div className="mx-auto max-w-2xl p-6">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+          Checking admin access...
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-100">
       <div className="mx-auto flex max-w-[1440px] flex-col md:min-h-screen md:flex-row">
