@@ -34,6 +34,8 @@ model User {
   role             UserRole        @default(USER)
   avatar           String?
   phone            String?
+  resetToken       String?
+  resetTokenExpiry DateTime?
   properties       Property[]
   favorites        Favorite[]
   sentMessages     Message[]       @relation("SentMessages")
