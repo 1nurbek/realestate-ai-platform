@@ -43,7 +43,7 @@ const initialState: FormState = {
   longitude: '',
 };
 
-export default function NewPropertyPage({ editId }: { editId?: string } = {}) {
+export default function NewPropertyPage() {
   const router = useRouter();
   const [form, setForm] = useState<FormState>(initialState);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -61,33 +61,7 @@ export default function NewPropertyPage({ editId }: { editId?: string } = {}) {
       .catch(() => {
         /* ignore */
       });
-
-    if (editId) {
-      apiClient
-        .get(`/properties/${editId}`)
-        .then((res) => {
-          const p = res.data?.data;
-          if (!p) return;
-          setForm({
-            title: p.title || '',
-            description: p.description || '',
-            price: String(p.price ?? ''),
-            location: p.location || '',
-            address: p.address || '',
-            size: String(p.size ?? ''),
-            rooms: String(p.rooms ?? ''),
-            bathrooms: String(p.bathrooms ?? ''),
-            type: TYPES.includes(p.type) ? p.type : 'APARTMENT',
-            categoryId: p.categoryId || '',
-            imagesText: (p.images || []).join('\n'),
-            featuresText: (p.features || []).join('\n'),
-            latitude: p.latitude != null ? String(p.latitude) : '',
-            longitude: p.longitude != null ? String(p.longitude) : '',
-          });
-        })
-        .catch((err: any) => setError(err?.response?.data?.message || 'Failed to load property.'));
-    }
-  }, [editId]);
+  }, []);
 
   const bind = (key: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm((prev) => ({ ...prev, [key]: e.target.value } as FormState));
@@ -105,7 +79,7 @@ export default function NewPropertyPage({ editId }: { editId?: string } = {}) {
       .map((s) => s.trim())
       .filter(Boolean);
 
-    if (!editId && images.length === 0) {
+    if (images.length === 0) {
       setError('Please add at least one image URL.');
       return;
     }
@@ -129,11 +103,7 @@ export default function NewPropertyPage({ editId }: { editId?: string } = {}) {
 
     setSaving(true);
     try {
-      if (editId) {
-        await apiClient.patch(`/properties/${editId}`, payload);
-      } else {
-        await apiClient.post('/properties', payload);
-      }
+      await apiClient.post('/properties', payload);
       router.push('/dashboard/properties');
     } catch (err: any) {
       const msg =
@@ -149,7 +119,7 @@ export default function NewPropertyPage({ editId }: { editId?: string } = {}) {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-bold text-slate-900">{editId ? 'Edit Property' : 'Add Property'}</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Add Property</h1>
         <p className="mt-1 text-sm text-slate-500">Fill out the details below.</p>
       </header>
       <form onSubmit={onSubmit} className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -223,7 +193,7 @@ export default function NewPropertyPage({ editId }: { editId?: string } = {}) {
         </div>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex gap-3">
-          <Button type="submit" disabled={saving}>{saving ? 'Saving...' : editId ? 'Save Changes' : 'Create Property'}</Button>
+          <Button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Create Property'}</Button>
           <Button type="button" variant="outline" onClick={() => router.back()} disabled={saving}>Cancel</Button>
         </div>
       </form>
