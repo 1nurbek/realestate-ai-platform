@@ -1,177 +1,232 @@
-"use client";
+'use client';
 
-import { useMemo, useState } from "react";
-import ImageUpload from "@/components/ImageUpload";
+import { useRouter } from 'next/navigation';
+import { FormEvent, useEffect, useState } from 'react';
+import Button from '@/components/Button';
+import { apiClient } from '@/lib/api';
 
-const featureOptions = ["Parking", "Garden", "Balcony", "Pool", "Gym", "Pet Friendly"];
+type Category = { id: string; name: string; slug: string };
 
-export default function NewPropertyPage() {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [price, setPrice] = useState("");
-  const [address, setAddress] = useState("");
-  const [city, setCity] = useState("");
-  const [type, setType] = useState("Apartment");
-  const [rooms, setRooms] = useState("");
-  const [bathrooms, setBathrooms] = useState("");
-  const [size, setSize] = useState("");
-  const [features, setFeatures] = useState<string[]>([]);
-  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
-  const [submitted, setSubmitted] = useState(false);
+const TYPES = ['APARTMENT', 'HOUSE', 'VILLA', 'LAND', 'COMMERCIAL'] as const;
 
-  const errors = useMemo(() => {
-    const list: string[] = [];
-    if (!title.trim()) list.push("Title is required.");
-    if (!description.trim()) list.push("Description is required.");
-    if (!price || Number(price) <= 0) list.push("Price must be greater than 0.");
-    if (!address.trim()) list.push("Address is required.");
-    if (!city.trim()) list.push("City is required.");
-    if (!rooms || Number(rooms) <= 0) list.push("Rooms must be greater than 0.");
-    if (!bathrooms || Number(bathrooms) <= 0) list.push("Bathrooms must be greater than 0.");
-    if (!size || Number(size) <= 0) list.push("Size must be greater than 0.");
-    return list;
-  }, [title, description, price, address, city, rooms, bathrooms, size]);
+type FormState = {
+  title: string;
+  description: string;
+  price: string;
+  location: string;
+  address: string;
+  size: string;
+  rooms: string;
+  bathrooms: string;
+  type: (typeof TYPES)[number];
+  categoryId: string;
+  imagesText: string;
+  featuresText: string;
+  latitude: string;
+  longitude: string;
+};
 
-  const toggleFeature = (value: string) => {
-    setFeatures((prev) => (prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value]));
+const initialState: FormState = {
+  title: '',
+  description: '',
+  price: '',
+  location: '',
+  address: '',
+  size: '',
+  rooms: '',
+  bathrooms: '',
+  type: 'APARTMENT',
+  categoryId: '',
+  imagesText: '',
+  featuresText: '',
+  latitude: '',
+  longitude: '',
+};
+
+export default function NewPropertyPage({ editId }: { editId?: string } = {}) {
+  const router = useRouter();
+  const [form, setForm] = useState<FormState>(initialState);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    apiClient
+      .get('/categories')
+      .then((res) => {
+        const list: Category[] = res.data?.data || [];
+        setCategories(list);
+        setForm((prev) => ({ ...prev, categoryId: prev.categoryId || list[0]?.id || '' }));
+      })
+      .catch(() => {
+        /* ignore */
+      });
+
+    if (editId) {
+      apiClient
+        .get(`/properties/${editId}`)
+        .then((res) => {
+          const p = res.data?.data;
+          if (!p) return;
+          setForm({
+            title: p.title || '',
+            description: p.description || '',
+            price: String(p.price ?? ''),
+            location: p.location || '',
+            address: p.address || '',
+            size: String(p.size ?? ''),
+            rooms: String(p.rooms ?? ''),
+            bathrooms: String(p.bathrooms ?? ''),
+            type: TYPES.includes(p.type) ? p.type : 'APARTMENT',
+            categoryId: p.categoryId || '',
+            imagesText: (p.images || []).join('\n'),
+            featuresText: (p.features || []).join('\n'),
+            latitude: p.latitude != null ? String(p.latitude) : '',
+            longitude: p.longitude != null ? String(p.longitude) : '',
+          });
+        })
+        .catch((err: any) => setError(err?.response?.data?.message || 'Failed to load property.'));
+    }
+  }, [editId]);
+
+  const bind = (key: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+    setForm((prev) => ({ ...prev, [key]: e.target.value } as FormState));
+
+  const onSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setError('');
+
+    const images = form.imagesText
+      .split(/\n|,/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const features = form.featuresText
+      .split(/\n|,/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    if (!editId && images.length === 0) {
+      setError('Please add at least one image URL.');
+      return;
+    }
+
+    const payload: any = {
+      title: form.title.trim(),
+      description: form.description.trim(),
+      price: Number(form.price),
+      location: form.location.trim(),
+      address: form.address.trim(),
+      size: Number(form.size),
+      rooms: Number(form.rooms),
+      bathrooms: Number(form.bathrooms),
+      type: form.type,
+      categoryId: form.categoryId,
+      images,
+      features,
+    };
+    if (form.latitude.trim()) payload.latitude = Number(form.latitude);
+    if (form.longitude.trim()) payload.longitude = Number(form.longitude);
+
+    setSaving(true);
+    try {
+      if (editId) {
+        await apiClient.patch(`/properties/${editId}`, payload);
+      } else {
+        await apiClient.post('/properties', payload);
+      }
+      router.push('/dashboard/properties');
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.errors?.[0]?.msg ||
+        err?.response?.data?.message ||
+        'Failed to save property.';
+      setError(msg);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <section className="mx-auto max-w-4xl space-y-6">
+    <div className="space-y-6">
       <header>
-        <h1 className="text-3xl font-bold text-slate-900">Add Property</h1>
-        <p className="mt-2 text-slate-600">Create a new listing with complete details and media.</p>
+        <h1 className="text-2xl font-bold text-slate-900">{editId ? 'Edit Property' : 'Add Property'}</h1>
+        <p className="mt-1 text-sm text-slate-500">Fill out the details below.</p>
       </header>
-
-      <form
-        className="space-y-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setSubmitted(true);
-          if (!errors.length) {
-            alert("Property submitted (mock).");
-          }
-        }}
-      >
-        {submitted && errors.length > 0 ? (
-          <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
-            <p className="font-semibold">Please fix the following:</p>
-            <ul className="mt-1 list-disc pl-5">
-              {errors.map((error) => (
-                <li key={error}>{error}</li>
+      <form onSubmit={onSubmit} className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Title</label>
+            <input className="w-full rounded-lg border-slate-200 text-sm" value={form.title} onChange={bind('title')} required />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Price (USD)</label>
+            <input type="number" min="0" step="1" className="w-full rounded-lg border-slate-200 text-sm" value={form.price} onChange={bind('price')} required />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Location (City/Area)</label>
+            <input className="w-full rounded-lg border-slate-200 text-sm" value={form.location} onChange={bind('location')} required />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Address</label>
+            <input className="w-full rounded-lg border-slate-200 text-sm" value={form.address} onChange={bind('address')} required />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Size (sqft)</label>
+            <input type="number" min="0" className="w-full rounded-lg border-slate-200 text-sm" value={form.size} onChange={bind('size')} required />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Rooms</label>
+            <input type="number" min="0" className="w-full rounded-lg border-slate-200 text-sm" value={form.rooms} onChange={bind('rooms')} required />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Bathrooms</label>
+            <input type="number" min="0" className="w-full rounded-lg border-slate-200 text-sm" value={form.bathrooms} onChange={bind('bathrooms')} required />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Type</label>
+            <select className="w-full rounded-lg border-slate-200 text-sm" value={form.type} onChange={bind('type')}>
+              {TYPES.map((t) => (
+                <option key={t} value={t}>{t}</option>
               ))}
-            </ul>
-          </div>
-        ) : null}
-
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-slate-900">Basic Information</h2>
-          <input
-            placeholder="Title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-          />
-          <textarea
-            placeholder="Description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={4}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-          />
-          <input
-            type="number"
-            placeholder="Price (USD)"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-          />
-        </div>
-
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-slate-900">Location</h2>
-          <input
-            placeholder="Address"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-          />
-          <input
-            placeholder="City"
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-          />
-        </div>
-
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-slate-900">Details</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-            >
-              <option>Apartment</option>
-              <option>House</option>
-              <option>Condo</option>
-              <option>Villa</option>
             </select>
-            <input
-              type="number"
-              placeholder="Rooms"
-              value={rooms}
-              onChange={(e) => setRooms(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-            />
-            <input
-              type="number"
-              placeholder="Bathrooms"
-              value={bathrooms}
-              onChange={(e) => setBathrooms(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-            />
-            <input
-              type="number"
-              placeholder="Size (sqft)"
-              value={size}
-              onChange={(e) => setSize(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Category</label>
+            <select className="w-full rounded-lg border-slate-200 text-sm" value={form.categoryId} onChange={bind('categoryId')} required>
+              <option value="" disabled>Select category</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Latitude (optional)</label>
+            <input type="number" step="any" className="w-full rounded-lg border-slate-200 text-sm" value={form.latitude} onChange={bind('latitude')} />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Longitude (optional)</label>
+            <input type="number" step="any" className="w-full rounded-lg border-slate-200 text-sm" value={form.longitude} onChange={bind('longitude')} />
           </div>
         </div>
-
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-slate-900">Features</h2>
-          <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
-            {featureOptions.map((option) => (
-              <label key={option} className="flex items-center gap-2 rounded-md border border-slate-200 p-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={features.includes(option)}
-                  onChange={() => toggleFeature(option)}
-                  className="h-4 w-4 accent-indigo-600"
-                />
-                {option}
-              </label>
-            ))}
-          </div>
-        </div>
-
         <div>
-          <label className="mb-2 block text-sm font-semibold text-slate-700">
-            Images
-          </label>
-          <ImageUpload onChange={setUploadedFiles} />
+          <label className="mb-1 block text-sm font-medium text-slate-700">Description</label>
+          <textarea rows={5} className="w-full rounded-lg border-slate-200 text-sm" value={form.description} onChange={bind('description')} required />
         </div>
-
-        <button
-          type="submit"
-          className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700"
-        >
-          Submit Property
-        </button>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Image URLs</label>
+          <textarea rows={4} className="w-full rounded-lg border-slate-200 text-sm" placeholder="https://... (one per line)" value={form.imagesText} onChange={bind('imagesText')} />
+          <p className="mt-1 text-xs text-slate-400">Enter one image URL per line. Uploads are coming soon.</p>
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Features</label>
+          <textarea rows={3} className="w-full rounded-lg border-slate-200 text-sm" placeholder="e.g. Parking, Pool (one per line)" value={form.featuresText} onChange={bind('featuresText')} />
+        </div>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <div className="flex gap-3">
+          <Button type="submit" disabled={saving}>{saving ? 'Saving...' : editId ? 'Save Changes' : 'Create Property'}</Button>
+          <Button type="button" variant="outline" onClick={() => router.back()} disabled={saving}>Cancel</Button>
+        </div>
       </form>
-    </section>
+    </div>
   );
 }

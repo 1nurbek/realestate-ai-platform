@@ -124,6 +124,17 @@ const markAsRead = async (req, res, next) => {
   }
 };
 
+const getUnreadCount = async (req, res, next) => {
+  try {
+    const count = await prisma.message.count({
+      where: { receiverId: req.user.id, read: false },
+    });
+    return sendSuccess(res, { count }, 'Unread count fetched');
+  } catch (error) {
+    return next(error);
+  }
+};
+
 module.exports = {
   getMessagesRules,
   sendMessageRules,
@@ -132,4 +143,5 @@ module.exports = {
   getMessages,
   sendMessage,
   markAsRead,
+  getUnreadCount,
 };

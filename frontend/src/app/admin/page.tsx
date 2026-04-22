@@ -1,113 +1,121 @@
-import AdminStatsCard from "@/components/admin/AdminStatsCard";
-import StatusBadge from "@/components/admin/StatusBadge";
+'use client';
 
-const stats = {
-  totalUsers: 1248,
-  totalProperties: 532,
-  totalActive: 401,
-  totalPending: 87,
-  totalSold: 44,
-  totalMessages: 3290,
-  totalReviews: 972,
-  newUsersThisMonth: 112,
-  newPropertiesThisMonth: 49,
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { FiUsers, FiHome, FiHeart, FiMessageSquare } from 'react-icons/fi';
+import { apiClient } from '@/lib/api';
+
+type Stats = {
+  totalUsers?: number;
+  totalProperties?: number;
+  totalFavorites?: number;
+  totalMessages?: number;
+  [key: string]: any;
 };
 
-const recentUsers = [
-  { id: "u1", name: "Sophia Martin", email: "sophia@example.com", role: "USER", createdAt: "2026-04-20T10:15:00Z" },
-  { id: "u2", name: "Ethan Walker", email: "ethan@example.com", role: "USER", createdAt: "2026-04-20T09:20:00Z" },
-  { id: "u3", name: "Noah Davis", email: "noah@example.com", role: "ADMIN", createdAt: "2026-04-19T11:04:00Z" },
-  { id: "u4", name: "Olivia Green", email: "olivia@example.com", role: "USER", createdAt: "2026-04-19T07:42:00Z" },
-];
+export default function AdminDashboard() {
+  const [stats, setStats] = useState<Stats>({});
+  const [recentProps, setRecentProps] = useState<any[]>([]);
+  const [recentUsers, setRecentUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-const recentProperties = [
-  { id: "p1", title: "Oceanfront Villa", owner: "Sophia Martin", price: 980000, status: "PENDING" as const },
-  { id: "p2", title: "Downtown Loft", owner: "Ethan Walker", price: 420000, status: "ACTIVE" as const },
-  { id: "p3", title: "Suburban Family Home", owner: "Olivia Green", price: 510000, status: "SOLD" as const },
-  { id: "p4", title: "Modern Apartment", owner: "Noah Davis", price: 310000, status: "ACTIVE" as const },
-];
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [s, p, u] = await Promise.all([
+          apiClient.get('/admin/stats'),
+          apiClient.get('/admin/recent-properties'),
+          apiClient.get('/admin/recent-users'),
+        ]);
+        if (cancelled) return;
+        setStats(s.data?.data || {});
+        setRecentProps(p.data?.data || []);
+        setRecentUsers(u.data?.data || []);
+      } catch (err: any) {
+        setError(err?.response?.data?.message || 'Failed to load admin data.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-const formatDate = (value: string) => new Date(value).toLocaleDateString();
-const formatCurrency = (value: number) => `$${value.toLocaleString()}`;
+  const cards = [
+    { label: 'Total Users', value: stats.totalUsers ?? '-', icon: FiUsers },
+    { label: 'Total Properties', value: stats.totalProperties ?? '-', icon: FiHome },
+    { label: 'Total Favorites', value: stats.totalFavorites ?? '-', icon: FiHeart },
+    { label: 'Total Messages', value: stats.totalMessages ?? '-', icon: FiMessageSquare },
+  ];
 
-export default function AdminDashboardPage() {
   return (
-    <section className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <AdminStatsCard label="Total Users" value={stats.totalUsers} hint={`+${stats.newUsersThisMonth} this month`} />
-        <AdminStatsCard
-          label="Total Properties"
-          value={stats.totalProperties}
-          hint={`+${stats.newPropertiesThisMonth} this month`}
-        />
-        <AdminStatsCard label="Active Listings" value={stats.totalActive} />
-        <AdminStatsCard label="Pending Review" value={stats.totalPending} />
-        <AdminStatsCard label="Messages" value={stats.totalMessages} />
-        <AdminStatsCard label="Reviews" value={stats.totalReviews} />
-      </div>
+    <div className="space-y-6">
+      {error && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>
+      )}
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Recent Users</h2>
-          <div className="mt-4 overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-slate-500">
-                  <th className="pb-2">Name</th>
-                  <th className="pb-2">Email</th>
-                  <th className="pb-2">Role</th>
-                  <th className="pb-2">Joined</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentUsers.map((user) => (
-                  <tr key={user.id} className="border-b border-slate-100 text-slate-700">
-                    <td className="py-2">{user.name}</td>
-                    <td className="py-2">{user.email}</td>
-                    <td className="py-2">{user.role}</td>
-                    <td className="py-2">{formatDate(user.createdAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {cards.map((card) => (
+          <div key={card.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <card.icon className="text-2xl text-indigo-600" />
+            <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-500">{card.label}</p>
+            <p className="mt-1 text-3xl font-bold text-slate-900">{loading ? '...' : card.value}</p>
           </div>
-        </article>
+        ))}
+      </section>
 
-        <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Recent Properties</h2>
-          <div className="mt-4 overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-slate-500">
-                  <th className="pb-2">Title</th>
-                  <th className="pb-2">Owner</th>
-                  <th className="pb-2">Price</th>
-                  <th className="pb-2">Status</th>
-                  <th className="pb-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentProperties.map((property) => (
-                  <tr key={property.id} className="border-b border-slate-100 text-slate-700">
-                    <td className="py-2">{property.title}</td>
-                    <td className="py-2">{property.owner}</td>
-                    <td className="py-2">{formatCurrency(property.price)}</td>
-                    <td className="py-2">
-                      <StatusBadge status={property.status} />
-                    </td>
-                    <td className="py-2">
-                      <div className="flex gap-2">
-                        <button className="rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold text-white">Approve</button>
-                        <button className="rounded-md bg-rose-600 px-2 py-1 text-xs font-semibold text-white">Delete</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <section className="grid gap-6 lg:grid-cols-2">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-lg font-bold text-slate-900">Recent Users</h2>
+            <Link href="/admin/users" className="text-sm font-medium text-indigo-600 hover:text-indigo-700">View all</Link>
           </div>
-        </article>
-      </div>
-    </section>
+          {loading ? (
+            <p className="text-sm text-slate-500">Loading...</p>
+          ) : recentUsers.length === 0 ? (
+            <p className="text-sm text-slate-500">No users.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {recentUsers.slice(0, 5).map((u) => (
+                <li key={u.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-slate-800">{u.name}</p>
+                    <p className="truncate text-xs text-slate-500">{u.email}</p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">{u.role}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-lg font-bold text-slate-900">Recent Properties</h2>
+            <Link href="/admin/properties" className="text-sm font-medium text-indigo-600 hover:text-indigo-700">View all</Link>
+          </div>
+          {loading ? (
+            <p className="text-sm text-slate-500">Loading...</p>
+          ) : recentProps.length === 0 ? (
+            <p className="text-sm text-slate-500">No properties.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {recentProps.slice(0, 5).map((p) => (
+                <li key={p.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                  <div className="min-w-0">
+                    <Link href={`/properties/${p.id}`} className="truncate font-medium text-slate-800 hover:text-indigo-600">{p.title}</Link>
+                    <p className="truncate text-xs text-slate-500">{p.location}</p>
+                  </div>
+                  <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">{p.status}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </section>
+    </div>
   );
 }

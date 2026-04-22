@@ -1,16 +1,12 @@
+'use client';
+
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { FiArrowRight, FiSearch, FiHome, FiKey } from 'react-icons/fi';
 import Button from '@/components/Button';
 import PropertyCard, { PropertyCardData } from '@/components/PropertyCard';
 import SearchBar from '@/components/SearchBar';
-import { FiArrowRight, FiSearch, FiHome, FiKey } from 'react-icons/fi';
-
-const featuredProperties: PropertyCardData[] = [
-  { id: '1', title: 'Lakeside Modern Villa', location: 'Austin, TX', price: '$1,250,000', beds: 4, baths: 3, size: 3200, image: 'https://picsum.photos/seed/property1/800/500' },
-  { id: '2', title: 'Downtown Skyline Apartment', location: 'Seattle, WA', price: '$690,000', beds: 2, baths: 2, size: 1280, image: 'https://picsum.photos/seed/property2/800/500' },
-  { id: '3', title: 'Family Home with Garden', location: 'Denver, CO', price: '$820,000', beds: 3, baths: 2, size: 2100, image: 'https://picsum.photos/seed/property3/800/500' },
-  { id: '4', title: 'Ocean View Penthouse', location: 'Miami, FL', price: '$2,100,000', beds: 4, baths: 4, size: 3600, image: 'https://picsum.photos/seed/property4/800/500' },
-  { id: '5', title: 'Urban Loft Residence', location: 'Chicago, IL', price: '$560,000', beds: 2, baths: 1, size: 1050, image: 'https://picsum.photos/seed/property5/800/500' },
-  { id: '6', title: 'Suburban Smart House', location: 'San Jose, CA', price: '$970,000', beds: 4, baths: 3, size: 2550, image: 'https://picsum.photos/seed/property6/800/500' },
-];
+import { apiClient } from '@/lib/api';
 
 const steps = [
   { title: 'Search', description: 'Explore curated listings with intelligent filters and local insights.', icon: FiSearch },
@@ -18,7 +14,54 @@ const steps = [
   { title: 'Own', description: 'Close with confidence using a trusted, guided buying experience.', icon: FiKey },
 ];
 
+const FALLBACK_IMAGE = 'https://picsum.photos/seed/property-fallback/800/500';
+
+type ApiProperty = {
+  id: string;
+  title: string;
+  location: string;
+  price: number | string;
+  rooms: number;
+  bathrooms: number;
+  size: number | string;
+  images?: string[];
+};
+
+const toCard = (p: ApiProperty): PropertyCardData => ({
+  id: p.id,
+  title: p.title,
+  location: p.location,
+  price: `$${Number(p.price).toLocaleString()}`,
+  beds: Number(p.rooms) || 0,
+  baths: Number(p.bathrooms) || 0,
+  size: Number(p.size) || 0,
+  image: p.images?.[0] || FALLBACK_IMAGE,
+});
+
 export default function HomePage() {
+  const [featured, setFeatured] = useState<PropertyCardData[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiClient.get('/properties/featured');
+        const data = res.data?.data;
+        if (!cancelled && Array.isArray(data)) {
+          setFeatured(data.slice(0, 6).map(toCard));
+        }
+      } catch {
+        // ignore — show empty state
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <main>
       <section className="relative overflow-hidden bg-gradient-to-r from-indigo-800 via-indigo-700 to-blue-600">
@@ -41,13 +84,27 @@ export default function HomePage() {
       <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
         <div className="mb-8 flex items-end justify-between">
           <h2 className="text-3xl font-bold text-slate-900">Featured Properties</h2>
-          <Button variant="outline" className="gap-2">View all <FiArrowRight /></Button>
+          <Link href="/properties">
+            <Button variant="outline" className="gap-2">View all <FiArrowRight /></Button>
+          </Link>
         </div>
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {featuredProperties.map((property) => (
-            <PropertyCard key={property.id} property={property} />
-          ))}
-        </div>
+        {loading ? (
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-80 animate-pulse rounded-2xl bg-slate-100" />
+            ))}
+          </div>
+        ) : featured.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
+            <p className="text-sm text-slate-500">No featured properties yet. Check back soon.</p>
+          </div>
+        ) : (
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {featured.map((property) => (
+              <PropertyCard key={property.id} property={property} />
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="bg-white py-16">
@@ -80,7 +137,9 @@ export default function HomePage() {
             Browse top-rated listings and connect with trusted agents today.
           </p>
           <div className="mt-6 flex justify-center">
-            <Button className="bg-white text-orange-600 hover:bg-orange-50">Get Started</Button>
+            <Link href="/properties">
+              <Button className="bg-white text-orange-600 hover:bg-orange-50">Get Started</Button>
+            </Link>
           </div>
         </div>
       </section>

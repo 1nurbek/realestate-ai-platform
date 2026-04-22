@@ -9,9 +9,11 @@ const {
   getMessages,
   sendMessage,
   markAsRead,
+  getUnreadCount,
 } = require('../../controllers/messageController');
 
 router.get('/conversations', auth, getConversations);
+router.get('/unread-count', auth, getUnreadCount);
 router.get('/', auth, getMessagesRules, validate, getMessages);
 router.post('/', auth, sendMessageRules, validate, sendMessage);
 router.patch('/read', auth, markAsReadRules, validate, markAsRead);

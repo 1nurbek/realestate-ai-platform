@@ -1,75 +1,117 @@
-"use client";
+'use client';
 
-import { useState } from "react";
+import { FormEvent, useEffect, useState } from 'react';
+import Button from '@/components/Button';
+import { apiClient } from '@/lib/api';
+import { readUser } from '@/lib/auth';
+
+type ProfileForm = {
+  name: string;
+  email: string;
+  phone: string;
+  avatar: string;
+};
 
 export default function ProfilePage() {
-  const [name, setName] = useState("Alex Morgan");
-  const [phone, setPhone] = useState("+1 (555) 230-1198");
+  const [form, setForm] = useState<ProfileForm>({ name: '', email: '', phone: '', avatar: '' });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiClient.get('/users/me');
+        if (cancelled) return;
+        const data = res.data?.data || {};
+        setForm({
+          name: data.name || '',
+          email: data.email || '',
+          phone: data.phone || '',
+          avatar: data.avatar || '',
+        });
+      } catch {
+        const cached = readUser();
+        if (cached) {
+          setForm({
+            name: cached.name || '',
+            email: cached.email || '',
+            phone: cached.phone || '',
+            avatar: cached.avatar || '',
+          });
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const onChange = (key: keyof ProfileForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm((prev) => ({ ...prev, [key]: e.target.value }));
+
+  const onSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setError('');
+    setSuccess('');
+    setSaving(true);
+    try {
+      const body: Record<string, string> = { name: form.name };
+      if (form.phone.trim()) body.phone = form.phone.trim();
+      if (form.avatar.trim()) body.avatar = form.avatar.trim();
+      const res = await apiClient.patch('/users/me', body);
+      const updated = res.data?.data;
+      if (updated) {
+        const existing = readUser();
+        const merged = { ...(existing || {}), ...updated };
+        localStorage.setItem('user', JSON.stringify(merged));
+      }
+      setSuccess('Profile updated successfully.');
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Failed to update profile.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="text-sm text-slate-500">Loading profile...</div>;
+  }
 
   return (
-    <section className="mx-auto max-w-3xl space-y-6">
+    <div className="space-y-6">
       <header>
-        <h1 className="text-3xl font-bold text-slate-900">Profile</h1>
-        <p className="mt-2 text-slate-600">Update your personal details and contact information.</p>
+        <h1 className="text-2xl font-bold text-slate-900">My Profile</h1>
+        <p className="mt-1 text-sm text-slate-500">Update your account details.</p>
       </header>
-
-      <form className="space-y-5 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <form onSubmit={onSubmit} className="max-w-xl space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div>
-          <label htmlFor="avatar" className="mb-2 block text-sm font-semibold text-slate-700">
-            Avatar
-          </label>
-          <div className="flex items-center gap-4">
-            <div className="grid h-16 w-16 place-items-center rounded-full bg-indigo-100 text-xl font-bold text-indigo-700">
-              AM
-            </div>
-            <input id="avatar" type="file" className="block text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:text-indigo-700" />
-          </div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Full name</label>
+          <input className="w-full rounded-lg border-slate-200 text-sm" value={form.name} onChange={onChange('name')} required />
         </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label htmlFor="name" className="mb-1 block text-sm font-semibold text-slate-700">
-              Name
-            </label>
-            <input
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-            />
-          </div>
-          <div>
-            <label htmlFor="email" className="mb-1 block text-sm font-semibold text-slate-700">
-              Email
-            </label>
-            <input
-              id="email"
-              value="alex@example.com"
-              readOnly
-              className="w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-500"
-            />
-          </div>
-        </div>
-
         <div>
-          <label htmlFor="phone" className="mb-1 block text-sm font-semibold text-slate-700">
-            Phone
-          </label>
-          <input
-            id="phone"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-          />
+          <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
+          <input className="w-full rounded-lg border-slate-200 bg-slate-50 text-sm text-slate-500" value={form.email} disabled />
+          <p className="mt-1 text-xs text-slate-400">Email cannot be changed.</p>
         </div>
-
-        <button
-          type="submit"
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
-        >
-          Save Profile
-        </button>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Phone</label>
+          <input className="w-full rounded-lg border-slate-200 text-sm" value={form.phone} onChange={onChange('phone')} placeholder="+1 555 000 1111" />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Avatar URL</label>
+          <input className="w-full rounded-lg border-slate-200 text-sm" value={form.avatar} onChange={onChange('avatar')} placeholder="https://..." />
+        </div>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        {success && <p className="text-sm text-emerald-700">{success}</p>}
+        <Button type="submit" disabled={saving}>
+          {saving ? 'Saving...' : 'Save Changes'}
+        </Button>
       </form>
-    </section>
+    </div>
   );
 }

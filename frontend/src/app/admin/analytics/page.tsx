@@ -1,84 +1,120 @@
-import SimpleBarChart from "@/components/admin/SimpleBarChart";
-import StatusBadge from "@/components/admin/StatusBadge";
+'use client';
 
-const userActivity = Array.from({ length: 30 }).map((_, index) => ({
-  label: `${index + 1}`,
-  value: [2, 1, 4, 3, 6, 5, 7, 5, 3, 8, 6, 4, 2, 3, 5, 7, 9, 8, 6, 4, 3, 2, 5, 6, 7, 5, 4, 3, 2, 4][index],
-}));
-
-const propertiesByType = [
-  { label: "Apartment", value: 210 },
-  { label: "House", value: 142 },
-  { label: "Villa", value: 68 },
-  { label: "Land", value: 55 },
-  { label: "Commercial", value: 57 },
-];
-
-const propertiesByStatus = [
-  { label: "ACTIVE", value: 401, color: "bg-emerald-500" },
-  { label: "PENDING", value: 87, color: "bg-amber-500" },
-  { label: "SOLD", value: 44, color: "bg-rose-500" },
-];
-
-const mostViewed = [
-  { id: "p2", title: "Downtown Loft", views: 611, status: "ACTIVE" as const },
-  { id: "p4", title: "Modern Apartment", views: 521, status: "ACTIVE" as const },
-  { id: "p1", title: "Oceanfront Villa", views: 432, status: "PENDING" as const },
-  { id: "p3", title: "Suburban Family Home", views: 288, status: "SOLD" as const },
-];
+import { useEffect, useState } from 'react';
+import { apiClient } from '@/lib/api';
 
 export default function AdminAnalyticsPage() {
-  const totalStatus = propertiesByStatus.reduce((acc, item) => acc + item.value, 0);
+  const [stats, setStats] = useState<any>({});
+  const [userActivity, setUserActivity] = useState<any[]>([]);
+  const [propertyStats, setPropertyStats] = useState<any>({});
+  const [mostViewed, setMostViewed] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [s, ua, ps, mv] = await Promise.all([
+          apiClient.get('/admin/stats'),
+          apiClient.get('/admin/user-activity'),
+          apiClient.get('/admin/property-stats'),
+          apiClient.get('/admin/most-viewed'),
+        ]);
+        if (cancelled) return;
+        setStats(s.data?.data || {});
+        setUserActivity(ua.data?.data || []);
+        setPropertyStats(ps.data?.data || {});
+        setMostViewed(mv.data?.data || []);
+      } catch (err: any) {
+        setError(err?.response?.data?.message || 'Failed to load analytics.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
-    <section className="space-y-6">
-      <h2 className="text-2xl font-bold text-slate-900">Analytics</h2>
+    <div className="space-y-6">
+      <header>
+        <h1 className="text-2xl font-bold text-slate-900">Analytics</h1>
+        <p className="mt-1 text-sm text-slate-500">Platform-wide insights.</p>
+      </header>
 
-      <SimpleBarChart title="User Signups (Last 30 Days)" data={userActivity} heightClassName="h-56" />
+      {error && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>
+      )}
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <SimpleBarChart title="Properties by Type" data={propertiesByType} />
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          { label: 'Total Users', value: stats.totalUsers },
+          { label: 'Total Properties', value: stats.totalProperties },
+          { label: 'Active Properties', value: stats.activeProperties },
+          { label: 'This Month Signups', value: stats.newUsersThisMonth },
+        ].map((card) => (
+          <div key={card.label} className="rounded-2xl border border-slate-200 bg-white p-5">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{card.label}</p>
+            <p className="mt-1 text-2xl font-bold text-slate-900">{loading ? '...' : card.value ?? '-'}</p>
+          </div>
+        ))}
+      </section>
 
-        <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h3 className="text-sm font-semibold text-slate-900">Properties by Status</h3>
-          <div className="mt-4 flex items-center gap-6">
-            <div
-              className="h-36 w-36 rounded-full"
-              style={{
-                background: `conic-gradient(
-                  #10b981 0deg ${(propertiesByStatus[0].value / totalStatus) * 360}deg,
-                  #f59e0b ${(propertiesByStatus[0].value / totalStatus) * 360}deg ${((propertiesByStatus[0].value + propertiesByStatus[1].value) / totalStatus) * 360}deg,
-                  #f43f5e ${((propertiesByStatus[0].value + propertiesByStatus[1].value) / totalStatus) * 360}deg 360deg
-                )`,
-              }}
-            />
-            <ul className="space-y-2">
-              {propertiesByStatus.map((item) => (
-                <li key={item.label} className="flex items-center gap-2 text-sm text-slate-700">
-                  <span className={`inline-block h-2.5 w-2.5 rounded-full ${item.color}`} />
-                  <span className="font-medium">{item.label}</span>
-                  <span className="text-slate-500">({item.value})</span>
+      <section className="grid gap-6 lg:grid-cols-2">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5">
+          <h2 className="text-lg font-bold text-slate-900">User Activity</h2>
+          {loading ? (
+            <p className="mt-3 text-sm text-slate-500">Loading...</p>
+          ) : userActivity.length === 0 ? (
+            <p className="mt-3 text-sm text-slate-500">No activity.</p>
+          ) : (
+            <ul className="mt-3 space-y-2 text-sm">
+              {userActivity.slice(0, 10).map((a: any, idx: number) => (
+                <li key={idx} className="flex items-center justify-between">
+                  <span className="text-slate-700">{a.date || a.label}</span>
+                  <span className="font-semibold text-slate-900">{a.count ?? a.value}</span>
                 </li>
               ))}
             </ul>
-          </div>
-        </article>
-      </div>
+          )}
+        </div>
 
-      <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h3 className="text-sm font-semibold text-slate-900">Most Viewed Properties</h3>
-        <ul className="mt-4 space-y-2">
-          {mostViewed.map((property) => (
-            <li key={property.id} className="flex items-center justify-between rounded-lg border border-slate-100 p-3">
-              <div>
-                <p className="font-medium text-slate-900">{property.title}</p>
-                <p className="text-xs text-slate-500">{property.views} views</p>
-              </div>
-              <StatusBadge status={property.status} />
-            </li>
-          ))}
-        </ul>
-      </article>
-    </section>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5">
+          <h2 className="text-lg font-bold text-slate-900">Property Stats by Type</h2>
+          {loading ? (
+            <p className="mt-3 text-sm text-slate-500">Loading...</p>
+          ) : (
+            <ul className="mt-3 space-y-2 text-sm">
+              {Object.entries(propertyStats).map(([key, val]: any) => (
+                <li key={key} className="flex items-center justify-between">
+                  <span className="text-slate-700">{key}</span>
+                  <span className="font-semibold text-slate-900">{typeof val === 'object' ? JSON.stringify(val) : String(val)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <h2 className="text-lg font-bold text-slate-900">Most Viewed Properties</h2>
+        {loading ? (
+          <p className="mt-3 text-sm text-slate-500">Loading...</p>
+        ) : mostViewed.length === 0 ? (
+          <p className="mt-3 text-sm text-slate-500">No data.</p>
+        ) : (
+          <ul className="mt-3 divide-y divide-slate-100 text-sm">
+            {mostViewed.slice(0, 10).map((p: any) => (
+              <li key={p.id} className="flex items-center justify-between py-2">
+                <span className="min-w-0 truncate text-slate-800">{p.title}</span>
+                <span className="font-semibold text-slate-900">{p.views} views</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
   );
 }

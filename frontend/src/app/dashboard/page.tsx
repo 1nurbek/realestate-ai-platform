@@ -1,59 +1,85 @@
-import Link from "next/link";
-import StatsCard from "@/components/dashboard/StatsCard";
+'use client';
 
-const activities = [
-  "You listed 'Modern Loft in Downtown'.",
-  "New inquiry received for 'Sea View Apartment'.",
-  "Saved search: '3-bedroom houses under $600k'.",
-  "Favorited property in Brooklyn Heights.",
-];
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { FiHome, FiHeart, FiMessageSquare, FiPlus } from 'react-icons/fi';
+import Button from '@/components/Button';
+import { apiClient } from '@/lib/api';
 
-export default function DashboardOverviewPage() {
-  const userName = "Alex";
+type Stats = {
+  myProperties: number;
+  favorites: number;
+  unreadMessages: number;
+  userName: string;
+};
+
+export default function DashboardHome() {
+  const [stats, setStats] = useState<Stats>({ myProperties: 0, favorites: 0, unreadMessages: 0, userName: '' });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [me, propsRes, favRes, msgRes] = await Promise.all([
+          apiClient.get('/users/me'),
+          apiClient.get('/properties/my', { params: { page: 1, limit: 1 } }),
+          apiClient.get('/favorites'),
+          apiClient.get('/messages/unread-count'),
+        ]);
+        if (cancelled) return;
+        const favData = favRes.data?.data;
+        const favCount = Array.isArray(favData)
+          ? favData.length
+          : favData?.pagination?.total || 0;
+        setStats({
+          userName: me.data?.data?.name || me.data?.data?.user?.name || '',
+          myProperties: propsRes.data?.data?.pagination?.total || 0,
+          favorites: favCount,
+          unreadMessages: msgRes.data?.data?.count || 0,
+        });
+      } catch {
+        // silent
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const cards = [
+    { label: 'My Properties', value: stats.myProperties, icon: FiHome, href: '/dashboard/properties' },
+    { label: 'Favorites', value: stats.favorites, icon: FiHeart, href: '/dashboard/favorites' },
+    { label: 'Unread Messages', value: stats.unreadMessages, icon: FiMessageSquare, href: '/dashboard/messages' },
+  ];
 
   return (
-    <section className="space-y-6">
-      <header>
-        <h1 className="text-3xl font-bold text-slate-900">Welcome back, {userName}</h1>
-        <p className="mt-2 text-slate-600">Track your listings, messages, and saved properties in one place.</p>
+    <div className="space-y-6">
+      <header className="flex flex-col gap-3 rounded-2xl bg-white p-6 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Welcome back{stats.userName ? `, ${stats.userName.split(' ')[0]}` : ''}!</h1>
+          <p className="mt-1 text-sm text-slate-500">Here's a snapshot of your account.</p>
+        </div>
+        <Link href="/dashboard/properties/new">
+          <Button className="gap-2"><FiPlus /> Add Property</Button>
+        </Link>
       </header>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatsCard label="Total Properties" value={4} hint="+1 this month" />
-        <StatsCard label="Total Favorites" value={12} hint="2 new this week" />
-        <StatsCard label="Unread Messages" value={3} hint="Respond quickly to close deals" />
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
-          <h2 className="text-lg font-semibold text-slate-900">Recent Activity</h2>
-          <ul className="mt-4 space-y-3">
-            {activities.map((activity) => (
-              <li key={activity} className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                {activity}
-              </li>
-            ))}
-          </ul>
-        </article>
-
-        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Quick Actions</h2>
-          <div className="mt-4 space-y-3">
-            <Link
-              href="/dashboard/properties/new"
-              className="inline-flex w-full justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
-            >
-              Add Property
-            </Link>
-            <Link
-              href="/properties"
-              className="inline-flex w-full justify-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-            >
-              Browse Properties
-            </Link>
-          </div>
-        </article>
-      </div>
-    </section>
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {cards.map((card) => (
+          <Link
+            key={card.label}
+            href={card.href}
+            className="rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-indigo-300 hover:shadow-sm"
+          >
+            <card.icon className="text-2xl text-indigo-600" />
+            <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-500">{card.label}</p>
+            <p className="mt-1 text-3xl font-bold text-slate-900">{loading ? '-' : card.value}</p>
+          </Link>
+        ))}
+      </section>
+    </div>
   );
 }
