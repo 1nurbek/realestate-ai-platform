@@ -1,23 +1,43 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { FormEvent, useState } from 'react';
 import Button from '@/components/Button';
+import { apiClient } from '@/lib/api';
 
-type LoginErrors = { email?: string; password?: string };
+type LoginErrors = { email?: string; password?: string; general?: string };
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
   const [errors, setErrors] = useState<LoginErrors>({});
+  const [loading, setLoading] = useState(false);
 
-  const onSubmit = (event: FormEvent) => {
+  const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const nextErrors: LoginErrors = {};
     if (!email.includes('@')) nextErrors.email = 'Please enter a valid email address.';
     if (password.length < 6) nextErrors.password = 'Password must be at least 6 characters.';
     setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+
+    setLoading(true);
+    try {
+      const res = await apiClient.post('/auth/login', { email, password });
+      const token = res.data?.data?.token;
+      const user = res.data?.data?.user;
+      if (token) localStorage.setItem('token', token);
+      if (user) localStorage.setItem('user', JSON.stringify(user));
+      router.push('/');
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || 'Login failed. Please check your credentials.';
+      setErrors({ general: msg });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -50,8 +70,9 @@ export default function LoginPage() {
             <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
             Remember me
           </label>
-          <Button type="submit" fullWidth>
-            Log In
+          {errors.general && <p className="text-sm text-red-600">{errors.general}</p>}
+          <Button type="submit" fullWidth disabled={loading}>
+            {loading ? 'Signing in...' : 'Log In'}
           </Button>
         </form>
         <p className="mt-5 text-sm text-slate-600">
